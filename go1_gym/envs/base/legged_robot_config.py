@@ -5,7 +5,7 @@ from params_proto import PrefixProto, ParamsProto
 
 class Cfg(PrefixProto, cli=False):
     class env(PrefixProto, cli=False):
-        num_envs = 4096
+        num_envs = 5 #4096
         num_observations = 235
         num_scalar_observations = 42
         # if not None a privilige_obs_buf will be returned by step() (critic obs for assymetric training). None is returned otherwise
@@ -78,7 +78,7 @@ class Cfg(PrefixProto, cli=False):
         measured_points_x = [-0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
         measured_points_y = [-0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5]
         selected = False  # select a unique terrain type and pass all arguments
-        terrain_kwargs = None  # Dict of arguments for selected terrain
+        terrain_kwargs = None   # Dict of arguments for selected terrain
         min_init_terrain_level = 0
         max_init_terrain_level = 5  # starting curriculum state
         terrain_length = 8.
@@ -100,6 +100,7 @@ class Cfg(PrefixProto, cli=False):
         max_platform_height = 0.2
         center_robots = False
         center_span = 5
+        play = False
 
     class commands(PrefixProto, cli=False):
         command_curriculum = False
@@ -396,8 +397,10 @@ class Cfg(PrefixProto, cli=False):
     # viewer camera:
     class viewer(PrefixProto, cli=False):
         ref_env = 0
-        pos = [10, 0, 6]  # [m]
-        lookat = [11., 5, 3.]  # [m]
+        # pos = [10, 0, 6]  # [m]
+        # lookat = [11., 5, 3.]  # [m]
+        pos = [0, 0, 3]  # [m]
+        lookat = [0, 0, 0]  # [m]
 
     class sim(PrefixProto, cli=False):
         dt = 0.005

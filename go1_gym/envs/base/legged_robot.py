@@ -5,6 +5,7 @@ from typing import Dict
 
 from isaacgym import gymtorch, gymapi, gymutil
 from isaacgym.torch_utils import *
+from isaacgym.terrain_utils import *
 
 assert gymtorch
 import torch
@@ -15,6 +16,7 @@ from go1_gym.utils.math_utils import quat_apply_yaw, wrap_to_pi, get_scale_shift
 from go1_gym.utils.terrain import Terrain
 from .legged_robot_config import Cfg
 
+# from go1_gym.utils.sim_utils import *
 
 class LeggedRobot(BaseTask):
     def __init__(self, cfg: Cfg, sim_params, physics_engine, sim_device, headless, eval_cfg=None,
@@ -46,8 +48,16 @@ class LeggedRobot(BaseTask):
         self._init_command_distribution(torch.arange(self.num_envs, device=self.device))
 
         # self.rand_buffers_eval = self._init_custom_buffers__(self.num_eval_envs)
+        # if not self.headless:
+        #     self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
+        
         if not self.headless:
-            self.set_camera(self.cfg.viewer.pos, self.cfg.viewer.lookat)
+            print(self.env_origins[0])
+            position = self.env_origins[0] + torch.tensor([2,-7,3]).to(self.device)
+            lookat = position + torch.tensor([-0.1,10,-1]).to(self.device)
+
+            self.set_camera(position, lookat)
+
         self._init_buffers()
 
         self._prepare_reward_function()
@@ -953,8 +963,7 @@ class LeggedRobot(BaseTask):
         Args:
             env_ids (List[int]): Environemnt ids
         """
-        self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof),
-                                                                        device=self.device)
+        self.dof_pos[env_ids] = self.default_dof_pos * torch_rand_float(0.5, 1.5, (len(env_ids), self.num_dof), device=self.device)                                                               
         self.dof_vel[env_ids] = 0.
 
         env_ids_int32 = env_ids.to(dtype=torch.int32)
@@ -1569,6 +1578,31 @@ class LeggedRobot(BaseTask):
             self.gym.set_actor_rigid_body_properties(env_handle, anymal_handle, body_props, recomputeInertia=True)
             self.envs.append(env_handle)
             self.actor_handles.append(anymal_handle)
+            # self.robot_actor_idxs.append(self.gym.get_actor_index(env_handle, anymal_handle, gymapi.DOMAIN_SIM))
+            # box/obstacle
+            # obstacle_length = torch.rand(1).to(self.device) * (1 - 0.3) + 0.3
+            # obstacle_width = 0.4
+            # obstacle_height = 1.0
+            # obstacle_y_pos = torch.rand(1).to(self.device) * (0.5 + 1.2) - 1.2
+            # obstacle_x_pos = (torch.rand(1).to(self.device) * ((1.0 - (obstacle_length / 2)) * 2)) - (1.0 - (obstacle_length / 2))
+            # asset_obstacle = self.gym.create_box(self.sim, obstacle_length, obstacle_width, obstacle_height, asset_options)
+            # obstacle_pose = gymapi.Transform()
+            # obstacle_pose.p = gymapi.Vec3(*(self.env_origins[i,:2] + torch.Tensor([obstacle_x_pos, obstacle_y_pos]).to(self.device)), 1/2)
+            # obstacle_pose.r = gymapi.Quat.from_euler_zyx(0, 0, 0)
+            # obstacle_handle = self.gym.create_actor(env_handle, asset_obstacle, obstacle_pose, "obstacle", i, 0)
+            # shape_props5 = self.gym.get_actor_rigid_shape_properties(env_handle, obstacle_handle)
+            # shape_props5[0].restitution = 1
+            # shape_props5[0].compliance = 0.5
+            # #for prop in shape_props:
+            # #    prop.color = gymapi.Vec3(1, 0, 0)  # RGB for Red
+            # self.gym.set_actor_rigid_shape_properties(env_handle, obstacle_handle, shape_props5)
+            if self.cfg.terrain.play :
+                self._add_terrain("stair")
+                self._add_terrain("stair", x_offset=2.95, invert=True)
+                self._add_terrain("pyramid", x_offset=6, invert=False)
+            
+            
+
 
         self.feet_indices = torch.zeros(len(feet_names), dtype=torch.long, device=self.device, requires_grad=False)
         for i in range(len(feet_names)):
@@ -1804,3 +1838,49 @@ class LeggedRobot(BaseTask):
         heights = torch.min(heights, heights3)
 
         return heights.view(len(env_ids), -1) * self.terrain.cfg.vertical_scale
+
+    def _add_terrain(self, name="slope", x_offset=1., invert=False, width=2.8):
+        # terrains
+        num_terrains = 1
+        terrain_width = 2.
+        terrain_length = width
+        horizontal_scale = 0.05  # [m] resolution in x
+        vertical_scale = 0.005  # [m] resolution in z
+        num_rows = int(terrain_width/horizontal_scale)
+        num_cols = int(terrain_length/horizontal_scale)
+        heightfield = np.zeros((num_terrains*num_rows, num_cols), dtype=np.int16)
+
+        step_height = 0.15
+        step_width = 0.3
+        num_steps = terrain_width / step_width
+        height = step_height * num_steps
+        slope = height / terrain_width
+        # num_stairs = height / step_height
+        # step_width = terrain_length / num_stairs
+        
+        def new_sub_terrain(): return SubTerrain(width=num_rows, length=num_cols, vertical_scale=vertical_scale, horizontal_scale=horizontal_scale)
+        if name=="slope":
+            heightfield[0: num_rows, :] = sloped_terrain(new_sub_terrain(), slope=slope).height_field_raw
+        elif name=="stair":
+            heightfield[0: num_rows, :] = stairs_terrain(new_sub_terrain(), step_width=step_width, step_height=step_height).height_field_raw
+        elif name=="pyramid":
+            heightfield[0: num_rows, :] = pyramid_stairs_terrain(new_sub_terrain(), step_width=step_width, step_height=step_height).height_field_raw
+        else:
+            raise NotImplementedError("Not support terrains!")
+
+        if invert:
+            heightfield[0: num_rows, :] = heightfield[0: num_rows, :][::-1]
+
+        # add the terrain as a triangle mesh
+        vertices, triangles = convert_heightfield_to_trimesh(heightfield, horizontal_scale=horizontal_scale, vertical_scale=vertical_scale, slope_threshold=1.5)
+        tm_params = gymapi.TriangleMeshParams()
+        tm_params.nb_vertices = vertices.shape[0]
+        tm_params.nb_triangles = triangles.shape[0]
+        tm_params.transform.p.x = x_offset
+        tm_params.transform.p.y = 0
+        if name=="stair":
+            tm_params.transform.p.z = -0.09
+        elif name=="pyramid":
+            tm_params.transform.p.z = 0.01
+
+        self.gym.add_triangle_mesh(self.sim, vertices.flatten(), triangles.flatten(), tm_params)

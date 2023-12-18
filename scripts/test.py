@@ -179,6 +179,7 @@ def run_env(render=False, headless=False):
     Cfg.domain_rand.randomize_base_mass = True
     Cfg.domain_rand.added_mass_range = [0., 6.]
     Cfg.terrain.terrain_noise_magnitude = 0.0
+    Cfg.terrain.terrain_kwargs = { 'type': 'pyramid_stairs_terrain', 'step_width': 0.31, 'step_height': -0.1, 'platform_size': 3.}
     # Cfg.asset.fix_base_link = True
 
     Cfg.domain_rand.lag_timesteps = 6

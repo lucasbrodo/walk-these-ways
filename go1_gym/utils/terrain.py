@@ -108,7 +108,7 @@ class Terrain:
                                                vertical_scale=cfg.vertical_scale,
                                                horizontal_scale=cfg.horizontal_scale)
 
-            eval(terrain_type)(terrain, **cfg.terrain_kwargs.terrain_kwargs)
+            eval(terrain_type)(terrain, **cfg.terrain_kwargs)
             self.add_terrain_to_map(cfg, terrain, i, j)
 
     def make_terrain(self, cfg, choice, difficulty, proportions):
