@@ -13,14 +13,14 @@ import torch
 from go1_gym import MINI_GYM_ROOT_DIR
 from go1_gym.envs.base.base_task import BaseTask
 from go1_gym.utils.math_utils import quat_apply_yaw, wrap_to_pi, get_scale_shift
-from go1_gym.utils.terrain import Terrain
+from go1_gym.utils.terrain import Terrain, perlin
 from .legged_robot_config import Cfg
 
 # from go1_gym.utils.sim_utils import *
 
 class LeggedRobot(BaseTask):
     def __init__(self, cfg: Cfg, sim_params, physics_engine, sim_device, headless, eval_cfg=None,
-                 initial_dynamics_dict=None):
+                 initial_dynamics_dict=None, terrain_props=None, custom_heightmap=None):
         """ Parses the provided config file,
             calls create_sim() (which creates, simulation, terrain and environments),
             initilizes pytorch buffers used during training
@@ -40,6 +40,8 @@ class LeggedRobot(BaseTask):
         self.debug_viz = False
         self.init_done = False
         self.initial_dynamics_dict = initial_dynamics_dict
+        self.terrain_props = terrain_props
+        self.custom_heightmap = custom_heightmap
         if eval_cfg is not None: self._parse_cfg(eval_cfg)
         self._parse_cfg(self.cfg)
 
@@ -382,7 +384,7 @@ class LeggedRobot(BaseTask):
                 -1) * 1.0), dim=1)
 
         # add noise if needed
-        if self.add_noise:
+        if self.cfg.noise.add_noise:
             self.obs_buf += (2 * torch.rand_like(self.obs_buf) - 1) * self.noise_scale_vec
 
         # build privileged obs
@@ -508,21 +510,32 @@ class LeggedRobot(BaseTask):
                                        self.sim_params)
 
         mesh_type = self.cfg.terrain.mesh_type
-        if mesh_type in ['heightfield', 'trimesh']:
-            if self.eval_cfg is not None:
-                self.terrain = Terrain(self.cfg.terrain, self.num_train_envs, self.eval_cfg.terrain, self.num_eval_envs)
-            else:
-                self.terrain = Terrain(self.cfg.terrain, self.num_train_envs)
-        if mesh_type == 'plane':
-            self._create_ground_plane()
-        elif mesh_type == 'heightfield':
-            self._create_heightfield()
-        elif mesh_type == 'trimesh':
-            self._create_trimesh()
-        elif mesh_type is not None:
-            raise ValueError("Terrain mesh type not recognised. Allowed types are [None, plane, heightfield, trimesh]")
-
+        # if mesh_type in ['heightfield', 'trimesh']:
+        #     if self.eval_cfg is not None:
+        #         self.terrain = Terrain(self.cfg.terrain, self.num_train_envs, self.eval_cfg.terrain, self.num_eval_envs)
+        #     else:
+        #         self.terrain = Terrain(self.cfg.terrain, self.num_train_envs)
+        # if mesh_type == 'plane':
+        #     self._create_ground_plane()
+        # elif mesh_type == 'heightfield':
+        #     self._create_heightfield()
+        # elif mesh_type == 'trimesh':
+        #     self._create_trimesh()
+        # elif mesh_type is not None:
+        #     raise ValueError("Terrain mesh type not recognised. Allowed types are [None, plane, heightfield, trimesh]")
+        from go1_gym.terrains import ALL_TERRAINS
+        if mesh_type not in ALL_TERRAINS.keys():
+            raise ValueError(f"Terrain mesh type {mesh_type} not recognised. Allowed types are {ALL_TERRAINS.keys()}")
+        
+        self.terrain = Terrain(self.cfg.terrain, self.num_envs)
+        self.terrain_obj = ALL_TERRAINS[mesh_type](self)
+        # self.add_tm_box_terrain()
         self._create_envs()
+        
+        self.terrain_obj.initialize()
+
+        # self.set_lighting()
+
 
 
     def set_camera(self, position, lookat):
@@ -718,7 +731,7 @@ class LeggedRobot(BaseTask):
             self._call_train_eval(self.refresh_actor_rigid_shape_props, env_ids)
 
     def _resample_commands(self, env_ids):
-
+        # print("env ids : ", env_ids)
         if len(env_ids) == 0: return
 
         timesteps = int(self.cfg.commands.resampling_time / self.dt)
@@ -1545,6 +1558,7 @@ class LeggedRobot(BaseTask):
         self.terrain_origins = torch.zeros(self.num_envs, 3, device=self.device, requires_grad=False)
         self.terrain_types = torch.zeros(self.num_envs, device=self.device, requires_grad=False, dtype=torch.long)
         self._call_train_eval(self._get_env_origins, torch.arange(self.num_envs, device=self.device))
+	    # self._get_env_origins(torch.arange(self.num_envs, device=self.device), self.cfg)
         env_lower = gymapi.Vec3(0., 0., 0.)
         env_upper = gymapi.Vec3(0., 0., 0.)
         self.actor_handles = []
@@ -1555,6 +1569,7 @@ class LeggedRobot(BaseTask):
         self.default_restitution = rigid_shape_props_asset[1].restitution
         self._init_custom_buffers__()
         self._call_train_eval(self._randomize_rigid_body_props, torch.arange(self.num_envs, device=self.device))
+        # self._randomize_rigid_body_props(torch.arange(self.num_envs, device=self.device), self.cfg)
         self._randomize_gravity()
 
         for i in range(self.num_envs):
@@ -1569,15 +1584,15 @@ class LeggedRobot(BaseTask):
 
             rigid_shape_props = self._process_rigid_shape_props(rigid_shape_props_asset, i)
             self.gym.set_asset_rigid_shape_properties(self.robot_asset, rigid_shape_props)
-            anymal_handle = self.gym.create_actor(env_handle, self.robot_asset, start_pose, "anymal", i,
+            robot_handle = self.gym.create_actor(env_handle, self.robot_asset, start_pose, "robot", i,
                                                   self.cfg.asset.self_collisions, 0)
             dof_props = self._process_dof_props(dof_props_asset, i)
-            self.gym.set_actor_dof_properties(env_handle, anymal_handle, dof_props)
-            body_props = self.gym.get_actor_rigid_body_properties(env_handle, anymal_handle)
+            self.gym.set_actor_dof_properties(env_handle, robot_handle, dof_props)
+            body_props = self.gym.get_actor_rigid_body_properties(env_handle, robot_handle)
             body_props = self._process_rigid_body_props(body_props, i)
-            self.gym.set_actor_rigid_body_properties(env_handle, anymal_handle, body_props, recomputeInertia=True)
+            self.gym.set_actor_rigid_body_properties(env_handle, robot_handle, body_props, recomputeInertia=True)
             self.envs.append(env_handle)
-            self.actor_handles.append(anymal_handle)
+            self.actor_handles.append(robot_handle)
             # self.robot_actor_idxs.append(self.gym.get_actor_index(env_handle, anymal_handle, gymapi.DOMAIN_SIM))
             # box/obstacle
             # obstacle_length = torch.rand(1).to(self.device) * (1 - 0.3) + 0.3
@@ -1596,10 +1611,10 @@ class LeggedRobot(BaseTask):
             # #for prop in shape_props:
             # #    prop.color = gymapi.Vec3(1, 0, 0)  # RGB for Red
             # self.gym.set_actor_rigid_shape_properties(env_handle, obstacle_handle, shape_props5)
-            if self.cfg.terrain.play :
-                self._add_terrain("stair")
-                self._add_terrain("stair", x_offset=2.95, invert=True)
-                self._add_terrain("pyramid", x_offset=6, invert=False)
+            # if self.cfg.terrain.play :
+            #     self._add_terrain("stair")
+            #     self._add_terrain("stair", x_offset=2.95, invert=True)
+            #     self._add_terrain("pyramid", x_offset=6, invert=False)
             
             
 
@@ -1736,6 +1751,34 @@ class LeggedRobot(BaseTask):
             cfg.terrain.terrain_origins = torch.from_numpy(cfg.terrain.env_origins).to(self.device).to(torch.float)
             self.env_origins[env_ids] = cfg.terrain.terrain_origins[
                 self.terrain_levels[env_ids], self.terrain_types[env_ids]]
+        elif cfg.terrain.mesh_type in ["boxes", "boxes_tm"]:
+            self.custom_origins = True
+            # put robots at the origins defined by the terrain
+            max_init_level = int(cfg.terrain.max_init_terrain_level + cfg.terrain.num_border_boxes)
+            min_init_level = int(cfg.terrain.min_init_terrain_level + cfg.terrain.num_border_boxes)
+            if not cfg.terrain.curriculum: max_init_level = int(cfg.terrain.num_rows - 1 - cfg.terrain.num_border_boxes)
+            if not cfg.terrain.curriculum: min_init_level = int(0 + cfg.terrain.num_border_boxes)
+
+            if cfg.terrain.center_robots:
+                self.min_terrain_level = cfg.terrain.num_rows // 2 - cfg.terrain.center_span
+                self.max_terrain_level = cfg.terrain.num_rows // 2 + cfg.terrain.center_span - 1
+                min_terrain_type = cfg.terrain.num_cols // 2 - cfg.terrain.center_span
+                max_terrain_type = cfg.terrain.num_cols // 2 + cfg.terrain.center_span - 1
+                self.terrain_levels[env_ids] = torch.randint(self.min_terrain_level, self.max_terrain_level + 1, (len(env_ids),),
+                                                             device=self.device)
+                self.terrain_types[env_ids] = torch.randint(min_terrain_type, max_terrain_type + 1, (len(env_ids),),
+                                                            device=self.device)
+            else:
+                self.terrain_levels[env_ids] = torch.randint(min_init_level, max_init_level + 1, (len(env_ids),),
+                                                             device=self.device)
+                self.terrain_types[env_ids] = (torch.div(torch.arange(len(env_ids), device=self.device),
+                                                        (len(env_ids) / (cfg.terrain.num_cols - 2 * cfg.terrain.num_border_boxes)),
+                                                        rounding_mode='floor') + cfg.terrain.num_border_boxes).to(torch.long)
+                self.min_terrain_level = int(cfg.terrain.num_border_boxes)
+                self.max_terrain_level = int(cfg.terrain.num_rows - cfg.terrain.num_border_boxes)
+            cfg.terrain.env_origins[:, :, 2] = self.terrain_obj.terrain_cell_center_heights.cpu().numpy()
+            cfg.terrain.terrain_origins = torch.from_numpy(cfg.terrain.env_origins).to(self.device).to(torch.float)
+            self.env_origins[env_ids] = cfg.terrain.terrain_origins[self.terrain_levels[env_ids], self.terrain_types[env_ids]]
         else:
             self.custom_origins = False
             # create a grid of robots
@@ -1753,7 +1796,7 @@ class LeggedRobot(BaseTask):
         self.reward_scales = vars(self.cfg.reward_scales)
         self.curriculum_thresholds = vars(self.cfg.curriculum_thresholds)
         cfg.command_ranges = vars(cfg.commands)
-        if cfg.terrain.mesh_type not in ['heightfield', 'trimesh']:
+        if cfg.terrain.mesh_type not in ['heightfield', 'trimesh', 'boxes', 'boxes_tm']:
             cfg.terrain.curriculum = False
         max_episode_length_s = cfg.env.episode_length_s
         cfg.env.max_episode_length = np.ceil(max_episode_length_s / self.dt)

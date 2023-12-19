@@ -85,6 +85,7 @@ class Cfg(PrefixProto, cli=False):
         terrain_width = 8.
         num_rows = 10  # number of terrain rows (levels)
         num_cols = 20  # number of terrain cols (types)
+        num_border_boxes = 0
         # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete]
         terrain_proportions = [0.1, 0.1, 0.35, 0.25, 0.2]
         # trimesh only:
@@ -98,6 +99,9 @@ class Cfg(PrefixProto, cli=False):
         teleport_robots = True
         teleport_thresh = 2.0
         max_platform_height = 0.2
+        max_step_height = 0.26
+        min_step_run = 0.25
+        max_step_run = 0.4
         center_robots = False
         center_span = 5
         play = False
@@ -200,7 +204,7 @@ class Cfg(PrefixProto, cli=False):
         tracking_contacts_shaped_vel = 0.8
 
     class init_state(PrefixProto, cli=False):
-        pos = [0.0, 0.0, 1.]  # x,y,z [m]
+        pos = [0.0, 0.0, 1.0]  # x,y,z [m]
         rot = [0.0, 0.0, 0.0, 1.0]  # x,y,z,w [quat]
         lin_vel = [0.0, 0.0, 0.0]  # x,y,z [m/s]
         ang_vel = [0.0, 0.0, 0.0]  # x,y,z [rad/s]
@@ -248,6 +252,9 @@ class Cfg(PrefixProto, cli=False):
         friction_range = [0.5, 1.25]  # increase range
         randomize_restitution = False
         restitution_range = [0, 1.0]
+        ground_friction_range = [0, 1.0]
+        ground_restitution_range = [0, 1.0]
+        tile_roughness_range = [0.0, 0.1]
         randomize_base_mass = False
         # add link masses, increase range, randomize inertia, randomize joint properties
         added_mass_range = [-1., 1.]
