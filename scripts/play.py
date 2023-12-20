@@ -63,7 +63,7 @@ def load_env(label, headless=False):
 
     Cfg.env.num_recording_envs = 1
     Cfg.terrain.mesh_type = "trimesh"
-    Cfg.terrain.curriculum = True
+    # Cfg.terrain.curriculum = True
     Cfg.terrain.terrain_proportions = [0.1, 0.1, 0.35, 0.25, 0.2]
     Cfg.env.num_envs = 1
     Cfg.terrain.num_rows = 5
@@ -99,7 +99,7 @@ def play_go1(headless=True):
     import glob
     import os
 
-    label = "/home/lbraud/github/walk-these-ways/runs/gait-conditioned-agility/pretrain-v0/train/025417.456545"
+    label = "/home/lucas/github/walk-these-ways/runs/gait-conditioned-agility/pretrain-v0/train/025417.456545"
 
     env, policy = load_env(label, headless=headless)
 
@@ -109,7 +109,7 @@ def play_go1(headless=True):
              "bounding": [0, 0.5, 0],
              "pacing": [0, 0, 0.5]}
 
-    x_vel_cmd, y_vel_cmd, yaw_vel_cmd = 1.5, 0.0, 0.0
+    x_vel_cmd, y_vel_cmd, yaw_vel_cmd = 1.0, 0.0, 0.0
     body_height_cmd = 0.0
     step_frequency_cmd = 3.0
     gait = torch.tensor(gaits["trotting"])
