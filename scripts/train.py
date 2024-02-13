@@ -27,8 +27,8 @@ def train_go1(headless=True):
     Cfg.commands.num_ang_vel_bins = 30
     Cfg.curriculum_thresholds.tracking_ang_vel = 0.7
     Cfg.curriculum_thresholds.tracking_lin_vel = 0.8
-    Cfg.curriculum_thresholds.tracking_contacts_shaped_vel = 0.90
-    Cfg.curriculum_thresholds.tracking_contacts_shaped_force = 0.90
+    Cfg.curriculum_thresholds.tracking_contacts_shaped_vel = 0.90 #0.90
+    Cfg.curriculum_thresholds.tracking_contacts_shaped_force = 0.90 #0.90
 
     Cfg.commands.distributional_commands = True
 
@@ -80,7 +80,7 @@ def train_go1(headless=True):
     Cfg.env.priv_observe_foot_displacement = False
     Cfg.env.priv_observe_gravity_transformed_foot_displacement = False
 
-    Cfg.env.num_envs = 512
+    Cfg.env.num_envs = 256 #512
     Cfg.env.num_privileged_obs = 2
     Cfg.env.num_observation_history = 30
     Cfg.reward_scales.feet_contact_forces = 0.0
@@ -125,17 +125,18 @@ def train_go1(headless=True):
     Cfg.reward_scales.action_smoothness_2 = -0.1
     Cfg.reward_scales.dof_vel = -1e-4
     Cfg.reward_scales.dof_pos = -0.0
-    Cfg.reward_scales.jump = 10.0
+    # Augmented auxiliary rewards
+    Cfg.reward_scales.jump = 0.0 #10.0
     Cfg.reward_scales.base_height = 0.0
     Cfg.rewards.base_height_target = 0.30
     Cfg.reward_scales.estimation_bonus = 0.0
-    Cfg.reward_scales.raibert_heuristic = -10.0
+    Cfg.reward_scales.raibert_heuristic = -0.0 #-10.0
     Cfg.reward_scales.feet_impact_vel = -0.0
     Cfg.reward_scales.feet_clearance = -0.0
     Cfg.reward_scales.feet_clearance_cmd = -0.0
-    Cfg.reward_scales.feet_clearance_cmd_linear = -30.0
+    Cfg.reward_scales.feet_clearance_cmd_linear = -0.0 # -30.0
     Cfg.reward_scales.orientation = 0.0
-    Cfg.reward_scales.orientation_control = -5.0
+    Cfg.reward_scales.orientation_control = 0.0 # -5.0
     Cfg.reward_scales.tracking_stance_width = -0.0
     Cfg.reward_scales.tracking_stance_length = -0.0
     Cfg.reward_scales.lin_vel_z = -0.02
@@ -145,8 +146,8 @@ def train_go1(headless=True):
     Cfg.rewards.kappa_gait_probs = 0.07
     Cfg.rewards.gait_force_sigma = 100.
     Cfg.rewards.gait_vel_sigma = 10.
-    Cfg.reward_scales.tracking_contacts_shaped_force = 4.0
-    Cfg.reward_scales.tracking_contacts_shaped_vel = 4.0
+    Cfg.reward_scales.tracking_contacts_shaped_force = 0.0 # 4.0
+    Cfg.reward_scales.tracking_contacts_shaped_vel = 0.0   #4.0
     Cfg.reward_scales.collision = -5.0
 
     Cfg.rewards.reward_container_name = "CoRLRewards"
